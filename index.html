@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <!-- <base href="/"> -->
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="App Librarian">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <title>App Librarian</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script>
+    // Browser OCR via Tesseract.js. Response shape matches native Vision/ML Kit
+    // so MarcDraftParser can treat web lines the same way.
+    window.appLibrarianOcr = async function (base64Image) {
+      if (!window.Tesseract) {
+        throw new Error('Tesseract.js не загружен');
+      }
+
+      const imageDataUrl = 'data:image/jpeg;base64,' + base64Image;
+      const image = await new Promise(function (resolve, reject) {
+        const element = new Image();
+        element.onload = function () { resolve(element); };
+        element.onerror = reject;
+        element.src = imageDataUrl;
+      });
+      const imageWidth = image.naturalWidth || image.width;
+      const imageHeight = image.naturalHeight || image.height;
+
+      const worker = await window.Tesseract.createWorker('rus+eng', 1, {
+        logger: function () { }
+      });
+
+      try {
+        // Full card — titles, authors, imprint.
+        const fullResult = await worker.recognize(image, {
+          // Assume a single block of text (catalog card).
+          tessedit_pageseg_mode: '6',
+        });
+        const fullData = fullResult.data || {};
+
+        // Top-left shelf mark only (not the full-height left strip — that pulls
+        // half-cut body text and confuses Tesseract badly on web).
+        const leftWidth = Math.max(1, Math.round(imageWidth * 0.40));
+        const topHeight = Math.max(1, Math.round(imageHeight * 0.42));
+        const scale = 2; // upscale small digits for Tesseract
+        const leftCanvas = document.createElement('canvas');
+        leftCanvas.width = leftWidth * scale;
+        leftCanvas.height = topHeight * scale;
+        const leftContext = leftCanvas.getContext('2d');
+        if (!leftContext) {
+          throw new Error('Не удалось подготовить область шифра');
+        }
+        leftContext.imageSmoothingEnabled = true;
+        leftContext.drawImage(
+          image,
+          0,
+          0,
+          leftWidth,
+          topHeight,
+          0,
+          0,
+          leftWidth * scale,
+          topHeight * scale
+        );
+
+        // Shelf-mark pass: digits + letters, sparse layout.
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6',
+          // Keep both scripts; whitelist too tight kills Cyrillic Г/В.
+          preserve_interword_spaces: '1',
+        });
+        const leftResult = await worker.recognize(leftCanvas);
+        const leftData = leftResult.data || {};
+
+        function sourceLines(data) {
+          if (data.lines && data.lines.length) return data.lines;
+          // Fallback: group words by approximate y if lines are missing.
+          const words = data.words || [];
+          if (!words.length) return [];
+          const rows = [];
+          words.forEach(function (word) {
+            const box = word.bbox || {};
+            const midY = (Number(box.y0 || 0) + Number(box.y1 || 0)) / 2;
+            let row = rows.find(function (item) {
+              return Math.abs(item.midY - midY) < 12;
+            });
+            if (!row) {
+              row = { midY: midY, words: [] };
+              rows.push(row);
+            }
+            row.words.push(word);
+          });
+          rows.sort(function (a, b) { return a.midY - b.midY; });
+          return rows.map(function (row) {
+            row.words.sort(function (a, b) {
+              return Number((a.bbox || {}).x0 || 0) - Number((b.bbox || {}).x0 || 0);
+            });
+            const first = row.words[0].bbox || {};
+            const last = row.words[row.words.length - 1].bbox || {};
+            return {
+              text: row.words.map(function (w) { return w.text || ''; }).join(' '),
+              confidence: row.words.reduce(function (sum, w) {
+                return sum + Number(w.confidence || 0);
+              }, 0) / row.words.length,
+              bbox: {
+                x0: Number(first.x0 || 0),
+                y0: Math.min.apply(null, row.words.map(function (w) {
+                  return Number((w.bbox || {}).y0 || 0);
+                })),
+                x1: Number(last.x1 || 0),
+                y1: Math.max.apply(null, row.words.map(function (w) {
+                  return Number((w.bbox || {}).y1 || 0);
+                })),
+              },
+            };
+          });
+        }
+
+        function mapLines(data, region, prefix, options) {
+          options = options || {};
+          const coordScale = options.coordScale || 1;
+          const raw = sourceLines(data);
+          const mapped = raw.map(function (line, index) {
+            const box = line.bbox || {};
+            const x0 = Number(box.x0 || 0) / coordScale;
+            const y0 = Number(box.y0 || 0) / coordScale;
+            const x1 = Number(box.x1 || 0) / coordScale;
+            const y1 = Number(box.y1 || 0) / coordScale;
+            return {
+              id: prefix + index,
+              text: (line.text || '').trim(),
+              confidence: Number(line.confidence || 0) / 100,
+              alternatives: [],
+              bounds: {
+                left: x0 / imageWidth,
+                top: y0 / imageHeight,
+                width: Math.max(0, x1 - x0) / imageWidth,
+                height: Math.max(0, y1 - y0) / imageHeight,
+              },
+              region: region,
+            };
+          }).filter(function (line) {
+            return line.text.length > 0;
+          });
+
+          // Extra synthetic line: join top few fragments (Г + 35640 + 76).
+          if (region === 'call_number' && mapped.length >= 2) {
+            const top = mapped.slice(0, 4);
+            const joined = top.map(function (l) { return l.text; }).join(' ');
+            if (joined.trim().length >= 4) {
+              mapped.push({
+                id: prefix + 'joined',
+                text: joined,
+                confidence: top.reduce(function (s, l) {
+                  return s + l.confidence;
+                }, 0) / top.length,
+                alternatives: [],
+                bounds: {
+                  left: Math.min.apply(null, top.map(function (l) {
+                    return l.bounds.left;
+                  })),
+                  top: Math.min.apply(null, top.map(function (l) {
+                    return l.bounds.top;
+                  })),
+                  width: 0.35,
+                  height: 0.12,
+                },
+                region: region,
+              });
+            }
+          }
+          return mapped;
+        }
+
+        const fullLines = mapLines(fullData, 'full', 'web_full_');
+        const callLines = mapLines(leftData, 'call_number', 'web_call_', {
+          coordScale: scale,
+        });
+
+        // Also expose plain left text as a full-confidence line for the parser
+        // when Tesseract only returns one blob.
+        const leftPlain = (leftData.text || '').replace(/\s+/g, ' ').trim();
+        if (leftPlain && !callLines.some(function (l) {
+          return l.text.replace(/\s+/g, ' ') === leftPlain;
+        })) {
+          callLines.unshift({
+            id: 'web_call_plain',
+            text: leftPlain,
+            confidence: Number(leftData.confidence || 50) / 100,
+            alternatives: [],
+            bounds: { left: 0.02, top: 0.02, width: 0.36, height: 0.35 },
+            region: 'call_number',
+          });
+        }
+
+        return JSON.stringify({
+          text: fullData.text || '',
+          lines: fullLines.concat(callLines),
+          imageWidth: imageWidth,
+          imageHeight: imageHeight,
+        });
+      } finally {
+        await worker.terminate();
+      }
+    };
+  </script>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+
+</html>
