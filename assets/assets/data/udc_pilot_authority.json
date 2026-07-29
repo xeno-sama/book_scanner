@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "title": "UDC pilot authority for app_librarian",
+    "version": "2026.07-pilot.1",
+    "scope": ["literature", "law", "history", "economics", "art"],
+    "summary_source": "http://udcdata.info/udc-schema",
+    "russian_summary_source": "https://udcsummary.info/php/index.php?lang=ru",
+    "summary_license": "CC BY-SA 3.0",
+    "source_checksum": "e5e9e76415dda424ee07219e377b6cd1134cd305c8c03633baf2fe785d2c9ffa",
+    "source_checksum_algorithm": "SHA-256",
+    "source_status": "Reviewed pilot extensions layered over the official Russian UDC Summary snapshot and downloaded SKOS/RDF Summary",
+    "source_modified": "2020-11-25T07:53:14+00:00",
+    "full_mrf_included": false,
+    "note": "Curated pilot extensions for codes absent from the public Summary. It is not the licensed full UDC MRF and is merged over the Russian Summary derivative."
+  },
+  "items": [
+    {"code":"82","title":"Литература. Литературоведение","area":"literature"},
+    {"code":"82.0","title":"Теория литературы. Литературоведение","area":"literature"},
+    {"code":"821","title":"Художественная литература отдельных литератур и языков","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"]},
+    {"code":"821.111","title":"Английская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"]},
+    {"code":"821.161.1","title":"Русская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"]},
+    {"code":"821.512.122","title":"Казахская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true},
+    {"code":"821.512.144","title":"Балкарская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true},
+    {"code":"821.512.154","title":"Кыргызская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true},
+
+    {"code":"34","title":"Право. Юридические науки","area":"law"},
+    {"code":"340","title":"Право в целом","area":"law"},
+    {"code":"341","title":"Международное право","area":"law"},
+    {"code":"342","title":"Государственное и конституционное право","area":"law"},
+    {"code":"342.9","title":"Административное право","area":"law"},
+    {"code":"343","title":"Уголовное право","area":"law"},
+    {"code":"343.1","title":"Уголовный процесс","area":"law"},
+    {"code":"343.98","title":"Криминалистика","area":"law"},
+    {"code":"346","title":"Хозяйственное право","area":"law"},
+    {"code":"347","title":"Гражданское право","area":"law"},
+    {"code":"349","title":"Специальные отрасли права","area":"law"},
+    {"code":"349.2","title":"Трудовое право","area":"law"},
+
+    {"code":"94","title":"Всеобщая история","area":"history","parenthesized":["(100)","(47)","(575.2)"]},
+    {"code":"94(100)","title":"Всемирная история","area":"history"},
+    {"code":"94(47)","title":"История России","area":"history"},
+    {"code":"94(575.2)","title":"История Кыргызстана","area":"history"},
+
+    {"code":"33","title":"Экономика. Экономические науки","area":"economics"},
+    {"code":"330","title":"Экономика в целом","area":"economics"},
+    {"code":"331","title":"Труд. Занятость. Экономика труда","area":"economics"},
+    {"code":"332","title":"Региональная экономика","area":"economics"},
+    {"code":"334","title":"Формы организации в экономике","area":"economics"},
+    {"code":"336","title":"Финансы. Банковское дело. Деньги","area":"economics"},
+    {"code":"338","title":"Экономическая политика и управление","area":"economics"},
+    {"code":"339","title":"Торговля. Международные экономические отношения","area":"economics"},
+    {"code":"005","title":"Управление. Менеджмент","area":"economics"},
+
+    {"code":"7","title":"Искусство","area":"art"},
+    {"code":"72","title":"Архитектура","area":"art"},
+    {"code":"73","title":"Пластические искусства","area":"art"},
+    {"code":"74","title":"Дизайн. Прикладное искусство","area":"art"},
+    {"code":"75","title":"Живопись","area":"art"},
+    {"code":"76","title":"Графические искусства","area":"art"},
+    {"code":"77","title":"Фотография. Кинематография","area":"art"},
+    {"code":"78","title":"Музыка","area":"art"},
+    {"code":"791","title":"Зрелища. Кино. Театр","area":"art"},
+    {"code":"792","title":"Театр. Сценическое искусство","area":"art"},
+
+    {"code":"655","title":"Издательское дело. Полиграфия","area":"publishing"}
+  ]
+}
