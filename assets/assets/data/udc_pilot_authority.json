@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "UDC pilot authority for app_librarian",
-    "version": "2026.07-pilot.1",
+    "version": "2026.07-pilot.2",
     "scope": ["literature", "law", "history", "economics", "art"],
     "summary_source": "http://udcdata.info/udc-schema",
     "russian_summary_source": "https://udcsummary.info/php/index.php?lang=ru",
@@ -20,8 +20,12 @@
     {"code":"821.111","title":"Английская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"]},
     {"code":"821.161.1","title":"Русская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"]},
     {"code":"821.512.122","title":"Казахская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true},
-    {"code":"821.512.144","title":"Балкарская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true},
+    {"code":"821.512.142","title":"Балкарская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true,"source":"reviewed_rsl_catalog","source_id":"https://search.rsl.ru/ru/record/01004407441"},
+    {"code":"821.351.43","title":"Ингушская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true,"source":"reviewed_rsl_catalog","source_id":"https://search.rsl.ru/ru/record/01003352102"},
     {"code":"821.512.154","title":"Кыргызская литература","area":"literature","suffixes":["-1","-2","-3","-31","-32","-312.9"],"extension":true},
+
+    {"code":"352.07","title":"Организация местного управления. Органы и учреждения местного управления","area":"public_administration","extension":true,"source":"udc_consortium_mrf12_errata","source_id":"https://udcc.org/files/EC33Errata_and_MRF11_validation_correction.pdf"},
+    {"code":"(476.12)","title":"Минск, город","area":"geography","extension":true,"source":"reviewed_udc_mrf12_public_browser","source_id":"https://udcmrf.nuk.uni-lj.si/Tabela.aspx?db=SPV&polje=1e&tabela=seznam"},
 
     {"code":"34","title":"Право. Юридические науки","area":"law"},
     {"code":"340","title":"Право в целом","area":"law"},
