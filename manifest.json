@@ -1,6 +1,6 @@
 {
-    "name": "App Librarian",
-    "short_name": "App Librarian",
+    "name": "Библиотекарь",
+    "short_name": "Библиотекарь",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
