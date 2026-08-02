@@ -317,7 +317,8 @@
       "repeatable": true,
       "mode": "editable",
       "indicators": [
-        "13"
+        "13",
+        "31"
       ],
       "subfields": [
         {
