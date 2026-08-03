@@ -19,6 +19,13 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <!--
+    Keep Flutter's logical pixels aligned with the physical mobile viewport.
+    Without this tag mobile browsers lay the app out as a wide desktop page
+    and then zoom/pan the hidden text-editing element when a field is focused.
+  -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="description" content="A new Flutter project.">
 
   <!-- iOS meta tags & icons -->
