@@ -1,7 +1,7 @@
 {
   "catalog": "NLKR",
-  "version": 1,
-  "field_count": 38,
+  "version": 2,
+  "field_count": 39,
   "fields": [
     {
       "tag": "LDR",
@@ -198,6 +198,27 @@
         {
           "code": "2",
           "label": "Источник схемы"
+        }
+      ]
+    },
+    {
+      "tag": "090",
+      "label": "Локальный расстановочный шифр",
+      "group": "Коды и классификация",
+      "record_pct": 0.0,
+      "repeatable": false,
+      "mode": "editable",
+      "indicators": [
+        "  "
+      ],
+      "subfields": [
+        {
+          "code": "a",
+          "label": "Локальный классификационный индекс"
+        },
+        {
+          "code": "b",
+          "label": "Авторский знак"
         }
       ]
     },
