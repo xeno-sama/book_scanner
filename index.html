@@ -178,32 +178,6 @@
             return line.text.length > 0;
           });
 
-          // Extra synthetic line: join top few fragments (Г + 35640 + 76).
-          if (region === 'call_number' && mapped.length >= 2) {
-            const top = mapped.slice(0, 4);
-            const joined = top.map(function (l) { return l.text; }).join(' ');
-            if (joined.trim().length >= 4) {
-              mapped.push({
-                id: prefix + 'joined',
-                text: joined,
-                confidence: top.reduce(function (s, l) {
-                  return s + l.confidence;
-                }, 0) / top.length,
-                alternatives: [],
-                bounds: {
-                  left: Math.min.apply(null, top.map(function (l) {
-                    return l.bounds.left;
-                  })),
-                  top: Math.min.apply(null, top.map(function (l) {
-                    return l.bounds.top;
-                  })),
-                  width: 0.35,
-                  height: 0.12,
-                },
-                region: region,
-              });
-            }
-          }
           return mapped;
         }
 
@@ -211,22 +185,6 @@
         const callLines = mapLines(leftData, 'call_number', 'web_call_', {
           coordScale: scale,
         });
-
-        // Also expose plain left text as a full-confidence line for the parser
-        // when Tesseract only returns one blob.
-        const leftPlain = (leftData.text || '').replace(/\s+/g, ' ').trim();
-        if (leftPlain && !callLines.some(function (l) {
-          return l.text.replace(/\s+/g, ' ') === leftPlain;
-        })) {
-          callLines.unshift({
-            id: 'web_call_plain',
-            text: leftPlain,
-            confidence: Number(leftData.confidence || 50) / 100,
-            alternatives: [],
-            bounds: { left: 0.02, top: 0.02, width: 0.36, height: 0.35 },
-            region: 'call_number',
-          });
-        }
 
         return JSON.stringify({
           text: fullData.text || '',
