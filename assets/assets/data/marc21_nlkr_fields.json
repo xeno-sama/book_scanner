@@ -1,7 +1,7 @@
 {
   "catalog": "NLKR",
   "version": 2,
-  "field_count": 39,
+  "field_count": 40,
   "fields": [
     {
       "tag": "LDR",
@@ -855,6 +855,33 @@
         {
           "code": "w",
           "label": "Контрольный номер"
+        }
+      ]
+    },
+    {
+      "tag": "856",
+      "label": "Электронное местонахождение и доступ",
+      "group": "Электронные ресурсы",
+      "record_pct": 0.0,
+      "repeatable": true,
+      "mode": "editable",
+      "indicators": [
+        "40",
+        "41",
+        "42"
+      ],
+      "subfields": [
+        {
+          "code": "u",
+          "label": "Адрес ресурса"
+        },
+        {
+          "code": "3",
+          "label": "Спецификация материала"
+        },
+        {
+          "code": "z",
+          "label": "Примечание о доступе"
         }
       ]
     },
