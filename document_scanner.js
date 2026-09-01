@@ -357,7 +357,8 @@
     ].join(';');
   }
 
-  scannerGlobal.appWebDocumentScanner = function (languageCode) {
+  scannerGlobal.appWebDocumentScanner = function (languageCode, compactUi) {
+    compactUi = compactUi === true;
     var labels = languageCode === 'ky' ? {
       busy: 'Сканер мурунтан эле ачык',
       cancel: 'Жокко чыгаруу',
@@ -470,7 +471,27 @@
       shutter.textContent = labels.shutter;
       shutter.style.cssText = buttonStyle('white-space:nowrap');
       footer.append(messageWrap, shutter);
-      root.append(header, viewport, footer);
+      if (compactUi) {
+        cancel.textContent = '×';
+        cancel.style.cssText = buttonStyle([
+          'position:absolute', 'top:calc(12px + env(safe-area-inset-top))',
+          'left:12px', 'z-index:3', 'width:46px', 'min-height:46px',
+          'padding:0', 'font-size:30px', 'line-height:1'
+        ].join(';'));
+        shutter.textContent = '';
+        shutter.setAttribute('aria-label', labels.shutter);
+        shutter.style.cssText = [
+          'position:absolute', 'left:50%',
+          'bottom:calc(18px + env(safe-area-inset-bottom))',
+          'transform:translateX(-50%)', 'z-index:3', 'width:68px',
+          'height:68px', 'padding:0', 'border-radius:50%',
+          'border:5px solid white', 'background:rgba(255,255,255,.25)',
+          'box-shadow:0 0 0 2px rgba(0,0,0,.32)'
+        ].join(';');
+        root.append(viewport, cancel, shutter);
+      } else {
+        root.append(header, viewport, footer);
+      }
 
       var analysis = document.createElement('canvas');
       var analysisContext = analysis.getContext('2d', { willReadFrequently: true });
@@ -494,6 +515,25 @@
 
       function finishError(code, text) {
         finish(JSON.stringify({ error: code, message: text }));
+      }
+
+      function waitForVideoFrame() {
+        return new Promise(function (resolve, reject) {
+          var attempts = 0;
+          function check() {
+            if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+              resolve();
+              return;
+            }
+            attempts += 1;
+            if (attempts >= 180) {
+              reject(new Error('camera_frame_timeout'));
+              return;
+            }
+            requestAnimationFrame(check);
+          }
+          check();
+        });
       }
 
       function drawOverlay(points, ready) {
@@ -629,8 +669,10 @@
         video.srcObject = cameraStream;
         return video.play();
       }).then(function () {
-        var sourceWidth = video.videoWidth || 1280;
-        var sourceHeight = video.videoHeight || 720;
+        return waitForVideoFrame();
+      }).then(function () {
+        var sourceWidth = video.videoWidth;
+        var sourceHeight = video.videoHeight;
         var scale = ANALYSIS_LONG_SIDE / Math.max(sourceWidth, sourceHeight);
         analysisWidth = Math.max(80, Math.round(sourceWidth * scale));
         analysisHeight = Math.max(80, Math.round(sourceHeight * scale));
