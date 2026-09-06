@@ -41,14 +41,40 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
     // Browser OCR via Tesseract.js. Response shape matches native Vision/ML Kit
     // so MarcDraftParser can treat web lines the same way.
-    window.appLibrarianOcr = async function (base64Image) {
-      if (!window.Tesseract) {
-        throw new Error('Tesseract.js не загружен');
+    var tesseractLoadPromise = null;
+
+    function ensureTesseract() {
+      if (scannerGlobal.Tesseract) {
+        return Promise.resolve(scannerGlobal.Tesseract);
       }
+      if (tesseractLoadPromise) return tesseractLoadPromise;
+
+      tesseractLoadPromise = new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        script.async = true;
+        script.onload = function () {
+          if (scannerGlobal.Tesseract) {
+            resolve(scannerGlobal.Tesseract);
+          } else {
+            tesseractLoadPromise = null;
+            reject(new Error('Tesseract.js не загрузился'));
+          }
+        };
+        script.onerror = function () {
+          tesseractLoadPromise = null;
+          reject(new Error('Не удалось загрузить Tesseract.js'));
+        };
+        document.head.appendChild(script);
+      });
+      return tesseractLoadPromise;
+    }
+
+    window.appLibrarianOcr = async function (base64Image) {
+      await ensureTesseract();
 
       const imageDataUrl = 'data:image/jpeg;base64,' + base64Image;
       const image = await new Promise(function (resolve, reject) {
@@ -201,9 +227,7 @@
     // much better than the printed-text settings used for the card front.
     // Its output remains an advisory list; Flutter never saves it directly.
     window.appLibrarianInventoryOcr = async function (base64Image) {
-      if (!window.Tesseract) {
-        throw new Error('Tesseract.js не загружен');
-      }
+      await ensureTesseract();
 
       const imageDataUrl = 'data:image/jpeg;base64,' + base64Image;
       const image = await new Promise(function (resolve, reject) {
