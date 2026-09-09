@@ -44,6 +44,10 @@
   <script>
     // Browser OCR via Tesseract.js. Response shape matches native Vision/ML Kit
     // so MarcDraftParser can treat web lines the same way.
+    // Keep this binding local to the OCR bootstrap. document_scanner.js is
+    // loaded later and must not be the source of a required global variable.
+    var scannerGlobal =
+      typeof globalThis !== 'undefined' ? globalThis : window;
     var tesseractLoadPromise = null;
 
     function ensureTesseract() {
