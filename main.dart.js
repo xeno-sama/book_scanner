@@ -20132,7 +20132,7 @@ this.b=null
 this.c=b},
 c5C(){var s=v.G
 if(s.appWebDocumentScanner!=null){s=s.appWebDocumentScanner.assetRevision
-s=(s==null?null:s)==="desktop-camera-5"}else s=!1
+s=(s==null?null:s)==="mobile-preview-7"}else s=!1
 return s},
 bLH(){var s=0,r=A.q(t.H),q,p=2,o=[],n=[],m,l,k,j,i
 var $async$bLH=A.m(function(a,b){if(a===1){o.push(b)
@@ -20144,7 +20144,7 @@ break}m=new A.br(new A.az($.aA,t.h),t.gR)
 $.bVB=m.a
 j=v.G
 i=j.document.createElement("script")
-i.src="document_scanner.js?v=desktop-camera-5"
+i.src="document_scanner.js?v=mobile-preview-7"
 l=i
 l.addEventListener("load",A.i9(new A.bLI(m)))
 l.addEventListener("error",A.i9(new A.bLJ(m)))

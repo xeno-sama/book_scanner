@@ -445,6 +445,7 @@
       var analysisHeight = 0;
       var stageResizeObserver = null;
       var cameraGeneration = 0;
+      var cancelVideoWait = null;
       var deviceListGeneration = 0;
       var activeDeviceId = '';
       var cameraSelect = null;
@@ -484,12 +485,17 @@
         'justify-content:center', 'overflow:hidden'
       ].join(';');
       var stage = document.createElement('div');
-      stage.style.cssText = 'position:relative;max-width:100%;max-height:100%;overflow:hidden';
+      // Safari не должен запускать поток в видеоблоке нулевого размера.
+      stage.style.cssText = 'position:relative;width:100%;height:100%;max-width:100%;max-height:100%;overflow:hidden';
       var video = document.createElement('video');
       video.autoplay = true;
       video.muted = true;
+      video.defaultMuted = true;
       video.playsInline = true;
       video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.setAttribute('autoplay', '');
+      video.setAttribute('muted', '');
       video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:black';
       var overlay = document.createElement('canvas');
       overlay.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1';
@@ -596,13 +602,12 @@
       var overlayContext = overlay.getContext('2d');
 
       function cleanup() {
+        if (cancelVideoWait) cancelVideoWait();
         cameraGeneration += 1;
         deviceListGeneration += 1;
         if (mediaDevices && mediaDevices.removeEventListener) mediaDevices.removeEventListener('devicechange', onDeviceChange);
         if (animationFrame) cancelAnimationFrame(animationFrame);
-        if (stream) {
-          stream.getTracks().forEach(function (track) { track.stop(); });
-        }
+        stopCurrentStream();
         root.remove();
         document.removeEventListener('keydown', onKeyDown);
         scannerGlobal.removeEventListener('pagehide', onPageHide);
@@ -624,21 +629,30 @@
 
       function waitForVideoFrame(generation) {
         return new Promise(function (resolve, reject) {
-          var attempts = 0;
-          function check() {
-            if (settled || generation !== cameraGeneration) { resolve(); return; }
-            if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
-              resolve();
-              return;
-            }
-            attempts += 1;
-            if (attempts >= 180) {
-              reject(new Error('camera_frame_timeout'));
-              return;
-            }
-            requestAnimationFrame(check);
+          var frame = 0, timer = 0, done = false;
+          function complete(error) {
+            if (done) return;
+            done = true;
+            if (frame) cancelAnimationFrame(frame);
+            if (timer) scannerGlobal.clearTimeout(timer);
+            if (cancelVideoWait === cancel) cancelVideoWait = null;
+            if (error) reject(error); else resolve();
           }
+          function cancel() { complete(); }
+          function check() {
+            if (settled || generation !== cameraGeneration) { complete(); return; }
+            if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+              complete();
+              return;
+            }
+            frame = requestAnimationFrame(check);
+          }
+          cancelVideoWait = cancel;
           check();
+          // Ограничение по времени работает и при остановленном rAF.
+          if (!done) timer = scannerGlobal.setTimeout(function () {
+            complete(new Error('camera_frame_timeout'));
+          }, 10000);
         });
       }
 
@@ -801,10 +815,16 @@
       }
 
       function stopCurrentStream() {
+        if (cancelVideoWait) cancelVideoWait();
         var previous = stream;
         stream = null;
-        if (previous) previous.getTracks().forEach(function (track) { track.stop(); });
-        video.srcObject = null;
+        // Перед первым потоком не сбрасываем srcObject: это лишний переход
+        // MediaElement, добавленный вместе с desktop-переключением камер.
+        if (previous) {
+          previous.getTracks().forEach(function (track) { track.stop(); });
+          if (video.pause) video.pause();
+          video.srcObject = null;
+        }
       }
 
       function markDisconnected() {
@@ -876,8 +896,12 @@
             if (stream === cameraStream && !settled) { markDisconnected(); updateCameraList(); }
           });
           video.srcObject = cameraStream;
-          await video.play();
-          await waitForVideoFrame(generation);
+          // У Safari play() иногда остаётся pending при уже доступных кадрах.
+          // Готовность видео проверяем независимо, ошибки воспроизведения сохраняем.
+          var playback = Promise.resolve(video.play()).then(function () {
+            return new Promise(function () {});
+          });
+          await Promise.race([waitForVideoFrame(generation), playback]);
           if (settled || generation !== cameraGeneration) return;
         var sourceWidth = video.videoWidth;
         var sourceHeight = video.videoHeight;
@@ -954,7 +978,7 @@
   // Kept public for deterministic browser tests with synthetic frames.
   scannerGlobal.appWebDocumentScanner.detectDocumentQuad = detectDocumentQuad;
   scannerGlobal.appWebDocumentScanner.revision = 'desktop-frame-4';
-  scannerGlobal.appWebDocumentScanner.assetRevision = 'desktop-camera-5';
+  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-preview-7';
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { detectDocumentQuad: detectDocumentQuad, cameraFrameRect: cameraFrameRect };
   }
