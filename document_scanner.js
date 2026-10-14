@@ -497,6 +497,11 @@
       video.setAttribute('autoplay', '');
       video.setAttribute('muted', '');
       video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:black';
+      if (!desktopFrame) {
+        // Intrinsic-размер video не должен растягивать мобильный aspect-ratio блок.
+        video.style.position = 'absolute';
+        video.style.inset = '0';
+      }
       var overlay = document.createElement('canvas');
       overlay.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1';
       stage.append(video, overlay);
@@ -971,14 +976,69 @@
         }
       }
 
-      openCamera(rememberedDeviceId, true);
+      function startMobileCamera() {
+        // Мобильный запуск до добавления desktop/USB: один запрос задней камеры,
+        // прямое подключение потока, без выбора устройства и desktop resize.
+        var generation = cameraGeneration;
+        mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        }).then(function (cameraStream) {
+          if (settled || generation !== cameraGeneration) {
+            cameraStream.getTracks().forEach(function (track) { track.stop(); });
+            return;
+          }
+          stream = cameraStream;
+          video.srcObject = cameraStream;
+          var playback = Promise.resolve(video.play()).then(function () {
+            return new Promise(function () {});
+          });
+          return Promise.race([waitForVideoFrame(generation), playback]);
+        }).then(function () {
+          if (settled || generation !== cameraGeneration) return;
+          var sourceWidth = video.videoWidth;
+          var sourceHeight = video.videoHeight;
+          var scale = ANALYSIS_LONG_SIDE / Math.max(sourceWidth, sourceHeight);
+          analysisWidth = Math.max(80, Math.round(sourceWidth * scale));
+          analysisHeight = Math.max(80, Math.round(sourceHeight * scale));
+          analysis.width = analysisWidth;
+          analysis.height = analysisHeight;
+          overlay.width = analysisWidth;
+          overlay.height = analysisHeight;
+          stage.style.aspectRatio = sourceWidth + ' / ' + sourceHeight;
+          // Прежняя мобильная компоновка, до fitStage/ResizeObserver для desktop.
+          var widthLimited = viewport.clientWidth && viewport.clientHeight
+            ? sourceWidth / sourceHeight >= viewport.clientWidth / viewport.clientHeight
+            : sourceWidth >= sourceHeight;
+          if (widthLimited) {
+            stage.style.width = '100%';
+            stage.style.height = 'auto';
+          } else {
+            stage.style.height = '100%';
+            stage.style.width = 'auto';
+          }
+          shutter.disabled = false;
+          if (!manualCapture) animationFrame = requestAnimationFrame(analyze);
+        }).catch(function (error) {
+          if (settled || generation !== cameraGeneration) return;
+          var denied = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+          finishError(denied ? 'permission_denied' : 'scan_failed', denied ? labels.permission : labels.openFailed);
+        });
+      }
+
+      if (desktopFrame) openCamera(rememberedDeviceId, true);
+      else startMobileCamera();
     });
   };
 
   // Kept public for deterministic browser tests with synthetic frames.
   scannerGlobal.appWebDocumentScanner.detectDocumentQuad = detectDocumentQuad;
   scannerGlobal.appWebDocumentScanner.revision = 'desktop-frame-4';
-  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-preview-7';
+  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-auto-8';
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { detectDocumentQuad: detectDocumentQuad, cameraFrameRect: cameraFrameRect };
   }
