@@ -357,8 +357,35 @@
     ].join(';');
   }
 
-  scannerGlobal.appWebDocumentScanner = function (languageCode, compactUi) {
+  function cameraFrameRect(width, height, aspectRatio, scale) {
+    aspectRatio = Number.isFinite(aspectRatio) ? Math.max(0.25, Math.min(4, aspectRatio)) : 15 / 9;
+    scale = Number.isFinite(scale) ? Math.max(0.2, Math.min(1, scale)) : 0.85;
+    var frameWidth = width * scale;
+    var frameHeight = frameWidth / aspectRatio;
+    if (frameHeight > height * scale) {
+      frameHeight = height * scale;
+      frameWidth = frameHeight * aspectRatio;
+    }
+    frameWidth = Math.max(1, Math.floor(frameWidth));
+    frameHeight = Math.max(1, Math.floor(frameHeight));
+    return { x: Math.floor((width - frameWidth) / 2), y: Math.floor((height - frameHeight) / 2), width: frameWidth, height: frameHeight };
+  }
+
+  function isDesktopBrowser() {
+    var agent = navigator.userAgent || '';
+    if (!agent) return false;
+    var mobile = /Android|iPhone|iPad|iPod/i.test(agent);
+    var iPadDesktopAgent = /Macintosh/i.test(agent) && navigator.maxTouchPoints > 1;
+    return !mobile && !iPadDesktopAgent;
+  }
+
+  scannerGlobal.appWebDocumentScanner = function (languageCode, compactUi, manualCapture, imageQuality, desktopFrame, frameAspectRatio, frameScale) {
     compactUi = compactUi === true;
+    // Старый Dart-клиент может ещё передавать только первые четыре аргумента.
+    desktopFrame = desktopFrame === true || isDesktopBrowser();
+    if (desktopFrame) manualCapture = true;
+    manualCapture = manualCapture === true;
+    imageQuality = typeof imageQuality === 'number' ? Math.max(1, Math.min(100, imageQuality)) / 100 : 0.96;
     var labels = languageCode === 'ky' ? {
       busy: 'Сканер мурунтан эле ачык',
       cancel: 'Жокко чыгаруу',
@@ -373,7 +400,11 @@
       capturing: 'Автоматтык түрдө тартып жатам…',
       unsupported: 'Бул браузер камераны колдобойт',
       permission: 'Браузерге камераны колдонууга уруксат бериңиз',
-      openFailed: 'Арткы камераны ачуу мүмкүн болгон жок',
+      openFailed: 'Камераны ачуу мүмкүн болгон жок. Башка колдонмолорду текшериңиз.',
+      chooseCamera: 'Камераны тандоо', refreshCameras: 'Камералардын тизмесин жаңыртуу',
+      defaultCamera: 'Демейки камера', unnamedCamera: 'Камера',
+      disconnected: 'Камера ажыратылды. Башка камераны тандаңыз.',
+      savedMissing: 'Мурун тандалган камера жок. Демейки камера ачылды.',
     } : {
       busy: 'Сканер уже открыт',
       cancel: 'Отмена',
@@ -388,7 +419,11 @@
       capturing: 'Снимаю автоматически…',
       unsupported: 'Этот браузер не поддерживает доступ к камере',
       permission: 'Разрешите браузеру использовать камеру',
-      openFailed: 'Не удалось открыть заднюю камеру',
+      openFailed: 'Не удалось открыть камеру. Проверьте, не занята ли она другим приложением.',
+      chooseCamera: 'Выбор камеры', refreshCameras: 'Обновить список камер',
+      defaultCamera: 'Камера по умолчанию', unnamedCamera: 'Камера',
+      disconnected: 'Камера отключена. Выберите другую камеру.',
+      savedMissing: 'Ранее выбранная камера недоступна. Открыта камера по умолчанию.',
     };
     if (active) {
       return Promise.resolve(JSON.stringify({
@@ -408,9 +443,20 @@
       var displayedQuad = null;
       var analysisWidth = 0;
       var analysisHeight = 0;
+      var stageResizeObserver = null;
+      var cameraGeneration = 0;
+      var deviceListGeneration = 0;
+      var activeDeviceId = '';
+      var cameraSelect = null;
+      var refreshCameras = null;
+      var mediaDevices = navigator.mediaDevices;
+      var selectionKey = 'bookScanner.desktopCameraDeviceId';
+      var rememberedDeviceId = '';
+      try { rememberedDeviceId = desktopFrame ? scannerGlobal.localStorage.getItem(selectionKey) || '' : ''; } catch (_) {}
 
       var root = document.createElement('div');
       root.id = 'app-web-document-scanner';
+      root.setAttribute('data-camera-mode', desktopFrame ? 'desktop-frame' : 'mobile');
       root.setAttribute('role', 'dialog');
       root.setAttribute('aria-modal', 'true');
       root.style.cssText = scannerStyles();
@@ -446,8 +492,21 @@
       video.setAttribute('playsinline', '');
       video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:black';
       var overlay = document.createElement('canvas');
-      overlay.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+      overlay.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1';
       stage.append(video, overlay);
+      var frameGuide = null;
+      if (desktopFrame) {
+        frameGuide = document.createElement('div');
+        frameGuide.id = 'app-web-camera-frame';
+        frameGuide.setAttribute('role', 'img');
+        frameGuide.setAttribute('aria-label', languageCode === 'ky' ? 'Карточканын алкагы' : 'Рамка карточки');
+        frameGuide.style.cssText = [
+          'position:absolute', 'box-sizing:border-box', 'pointer-events:none',
+          'border:3px solid #65d98b', 'border-radius:4px', 'z-index:2',
+          'box-shadow:0 0 0 200vmax rgba(0,0,0,.42)', 'display:none'
+        ].join(';');
+        stage.append(frameGuide);
+      }
       viewport.append(stage);
 
       var footer = document.createElement('div');
@@ -468,6 +527,7 @@
       messageWrap.append(message, progressTrack);
       var shutter = document.createElement('button');
       shutter.type = 'button';
+      shutter.disabled = true;
       shutter.textContent = labels.shutter;
       shutter.style.cssText = buttonStyle('white-space:nowrap');
       footer.append(messageWrap, shutter);
@@ -493,16 +553,61 @@
         root.append(header, viewport, footer);
       }
 
+      if (desktopFrame && mediaDevices && mediaDevices.enumerateDevices) {
+        var cameraBar = document.createElement('div');
+        cameraBar.style.cssText = compactUi
+          ? 'position:absolute;top:calc(12px + env(safe-area-inset-top));left:72px;right:12px;z-index:4;display:flex;gap:8px'
+          : 'display:flex;gap:8px;padding:0 12px 8px;flex:none';
+        cameraSelect = document.createElement('select');
+        cameraSelect.id = 'app-web-camera-select';
+        cameraSelect.setAttribute('aria-label', labels.chooseCamera);
+        cameraSelect.style.cssText = 'flex:1;min-width:0;max-width:360px;min-height:48px;font:inherit;font-size:16px;padding:0 10px;color:white;background:#17211f;border:1px solid #65d98b;border-radius:8px';
+        cameraSelect.disabled = true;
+        var initialOption = document.createElement('option');
+        initialOption.value = ''; initialOption.textContent = labels.defaultCamera;
+        cameraSelect.append(initialOption);
+        refreshCameras = document.createElement('button');
+        refreshCameras.type = 'button';
+        refreshCameras.textContent = '↻';
+        refreshCameras.setAttribute('aria-label', labels.refreshCameras);
+        refreshCameras.style.cssText = buttonStyle('min-width:48px;min-height:48px;padding:0;font-size:24px');
+        refreshCameras.addEventListener('click', function () {
+          updateCameraList().then(function () {
+            if (!settled && !stream) openCamera(cameraSelect.value, false);
+          });
+        });
+        cameraSelect.addEventListener('change', function () {
+          openCamera(cameraSelect.value, false);
+        });
+        cameraBar.append(cameraSelect, refreshCameras);
+        if (compactUi) {
+          cameraBar.style.flexWrap = 'wrap';
+          message.style.cssText = 'flex-basis:100%;display:none;font-size:14px;line-height:1.4;background:#17211f;padding:6px;box-sizing:border-box';
+          message.setAttribute('role', 'status');
+          cameraBar.append(message);
+        }
+        if (compactUi) root.append(cameraBar);
+        else root.insertBefore(cameraBar, viewport);
+        if (mediaDevices.addEventListener) mediaDevices.addEventListener('devicechange', onDeviceChange);
+      }
+
       var analysis = document.createElement('canvas');
       var analysisContext = analysis.getContext('2d', { willReadFrequently: true });
       var overlayContext = overlay.getContext('2d');
 
       function cleanup() {
+        cameraGeneration += 1;
+        deviceListGeneration += 1;
+        if (mediaDevices && mediaDevices.removeEventListener) mediaDevices.removeEventListener('devicechange', onDeviceChange);
         if (animationFrame) cancelAnimationFrame(animationFrame);
         if (stream) {
           stream.getTracks().forEach(function (track) { track.stop(); });
         }
         root.remove();
+        document.removeEventListener('keydown', onKeyDown);
+        scannerGlobal.removeEventListener('pagehide', onPageHide);
+        scannerGlobal.removeEventListener('resize', fitStage);
+        if (stageResizeObserver) stageResizeObserver.disconnect();
         active = false;
       }
 
@@ -517,10 +622,11 @@
         finish(JSON.stringify({ error: code, message: text }));
       }
 
-      function waitForVideoFrame() {
+      function waitForVideoFrame(generation) {
         return new Promise(function (resolve, reject) {
           var attempts = 0;
           function check() {
+            if (settled || generation !== cameraGeneration) { resolve(); return; }
             if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
               resolve();
               return;
@@ -536,14 +642,25 @@
         });
       }
 
+      function fitStage() {
+        if (!video.videoWidth || !video.videoHeight || !viewport.clientWidth || !viewport.clientHeight) return;
+        // Видео и маска занимают один прямоугольник без внутренних чёрных полос.
+        var ratio = video.videoWidth / video.videoHeight;
+        var width = Math.min(viewport.clientWidth, viewport.clientHeight * ratio);
+        stage.style.width = width + 'px';
+        stage.style.height = width / ratio + 'px';
+      }
+
       function drawOverlay(points, ready) {
         if (!overlayContext) return;
-        overlayContext.clearRect(0, 0, analysisWidth, analysisHeight);
+        var overlayWidth = overlay.width;
+        var overlayHeight = overlay.height;
+        overlayContext.clearRect(0, 0, overlayWidth, overlayHeight);
         if (!points) return;
         overlayContext.save();
         overlayContext.fillStyle = 'rgba(0,0,0,.42)';
         overlayContext.beginPath();
-        overlayContext.rect(0, 0, analysisWidth, analysisHeight);
+        overlayContext.rect(0, 0, overlayWidth, overlayHeight);
         overlayContext.moveTo(points[0].x, points[0].y);
         for (var index = 1; index < points.length; index += 1) {
           overlayContext.lineTo(points[index].x, points[index].y);
@@ -551,7 +668,7 @@
         overlayContext.closePath();
         overlayContext.fill('evenodd');
         overlayContext.strokeStyle = ready ? '#65d98b' : '#ffd166';
-        overlayContext.lineWidth = Math.max(2, analysisWidth / 120);
+        overlayContext.lineWidth = Math.max(2, overlayWidth / (desktopFrame ? 400 : 120));
         overlayContext.lineJoin = 'round';
         overlayContext.beginPath();
         overlayContext.moveTo(points[0].x, points[0].y);
@@ -560,7 +677,7 @@
         }
         overlayContext.closePath();
         overlayContext.stroke();
-        points.forEach(function (point) {
+        if (!desktopFrame) points.forEach(function (point) {
           overlayContext.beginPath();
           overlayContext.arc(point.x, point.y, Math.max(4, analysisWidth / 75), 0, Math.PI * 2);
           overlayContext.fillStyle = ready ? '#65d98b' : '#ffd166';
@@ -575,19 +692,25 @@
         message.textContent = labels.ready;
         progress.style.width = '100%';
         var captureCanvas = document.createElement('canvas');
-        captureCanvas.width = video.videoWidth;
-        captureCanvas.height = video.videoHeight;
+        var frame = desktopFrame ? cameraFrameRect(video.videoWidth, video.videoHeight, frameAspectRatio, frameScale) : null;
+        captureCanvas.width = frame ? frame.width : video.videoWidth;
+        captureCanvas.height = frame ? frame.height : video.videoHeight;
         var context = captureCanvas.getContext('2d');
         if (!context) {
           settled = false;
           finishError('scan_failed', labels.failed);
           return;
         }
-        context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-        var dataUrl = captureCanvas.toDataURL('image/jpeg', 0.96);
+        if (frame) {
+          // Координаты берём из исходного видеокадра, а не из размера окна.
+          context.drawImage(video, frame.x, frame.y, frame.width, frame.height, 0, 0, frame.width, frame.height);
+        } else {
+          context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+        }
+        var dataUrl = captureCanvas.toDataURL('image/jpeg', imageQuality);
         var payload = JSON.stringify({
           image_base64: dataUrl.substring(dataUrl.indexOf(',') + 1),
-          quad: normalizedQuad(
+          quad: manualCapture ? null : normalizedQuad(
             points || defaultQuad(analysisWidth, analysisHeight),
             analysisWidth,
             analysisHeight
@@ -646,6 +769,26 @@
         if (ready) capture(displayedQuad);
       }
 
+      function onKeyDown(event) {
+        if (event.key === 'Escape') finish(null);
+        if (manualCapture && (event.key === ' ' || event.key === 'Enter') && !shutter.disabled && !event.repeat && event.target.tagName !== 'BUTTON' && event.target.tagName !== 'SELECT') {
+          event.preventDefault();
+          capture(null);
+        }
+      }
+
+      function onPageHide() { finish(null); }
+      document.addEventListener('keydown', onKeyDown);
+      scannerGlobal.addEventListener('pagehide', onPageHide);
+      if (manualCapture) {
+        title.textContent = 'Камера';
+        message.textContent = languageCode === 'ky' ? 'Карточканы кадрга жайгаштырып, тартыңыз' : 'Поместите карточку в кадр и нажмите «Снять»';
+        progressTrack.style.display = 'none';
+      }
+      if (desktopFrame) {
+        message.textContent = languageCode === 'ky' ? 'Карточканы алкакка жайгаштырып, тартыңыз' : 'Поместите карточку внутрь рамки и нажмите «Снять»';
+      }
+
       cancel.addEventListener('click', function () { finish(null); });
       shutter.addEventListener('click', function () {
         capture(displayedQuad || defaultQuad(analysisWidth, analysisHeight));
@@ -657,20 +800,85 @@
         return;
       }
 
-      navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      }).then(function (cameraStream) {
-        stream = cameraStream;
-        video.srcObject = cameraStream;
-        return video.play();
-      }).then(function () {
-        return waitForVideoFrame();
-      }).then(function () {
+      function stopCurrentStream() {
+        var previous = stream;
+        stream = null;
+        if (previous) previous.getTracks().forEach(function (track) { track.stop(); });
+        video.srcObject = null;
+      }
+
+      function markDisconnected() {
+        if (settled) return;
+        cameraGeneration += 1;
+        shutter.disabled = true;
+        if (frameGuide) frameGuide.style.display = 'none';
+        stopCurrentStream();
+        message.textContent = labels.disconnected;
+        if (compactUi) message.style.display = 'block';
+        if (refreshCameras) refreshCameras.disabled = false;
+      }
+
+      async function updateCameraList() {
+        if (!cameraSelect || settled) return;
+        var listGeneration = ++deviceListGeneration;
+        try {
+          var devices = await mediaDevices.enumerateDevices();
+          if (settled || listGeneration !== deviceListGeneration) return;
+          var cameras = devices.filter(function (device) { return device.kind === 'videoinput'; });
+          var selected = activeDeviceId || cameraSelect.value || rememberedDeviceId;
+          cameraSelect.replaceChildren();
+          var defaultOption = document.createElement('option');
+          defaultOption.value = ''; defaultOption.textContent = labels.defaultCamera;
+          cameraSelect.append(defaultOption);
+          cameras.forEach(function (device, index) {
+            var option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = device.label || labels.unnamedCamera + ' ' + (index + 1);
+            cameraSelect.append(option);
+          });
+          cameraSelect.value = cameras.some(function (device) { return device.deviceId === selected; }) ? selected : '';
+          cameraSelect.disabled = false;
+          if (stream && activeDeviceId && !cameras.some(function (device) { return device.deviceId === activeDeviceId; })) markDisconnected();
+        } catch (_) {
+          // Снимок остаётся доступным, даже если браузер не разрешил перечень устройств.
+          if (!settled && listGeneration === deviceListGeneration) cameraSelect.disabled = false;
+        }
+      }
+
+      function onDeviceChange() { updateCameraList(); }
+
+      async function openCamera(deviceId, initial) {
+        if (settled) return;
+        deviceListGeneration += 1;
+        var generation = ++cameraGeneration;
+        shutter.disabled = true;
+        if (refreshCameras) refreshCameras.disabled = true;
+        if (cameraSelect) cameraSelect.disabled = true;
+        if (frameGuide) frameGuide.style.display = 'none';
+        if (animationFrame) { cancelAnimationFrame(animationFrame); animationFrame = 0; }
+        stopCurrentStream();
+        stableFrames = 0; previousRawQuad = null; displayedQuad = null;
+        var cameraStream = null;
+        try {
+          var constraints = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+          if (deviceId) constraints.deviceId = { exact: deviceId };
+          else if (!desktopFrame) constraints.facingMode = { ideal: 'environment' };
+          cameraStream = await mediaDevices.getUserMedia({ audio: false, video: constraints });
+          // При отмене или быстром переключении поздний поток не должен ожить.
+          if (settled || generation !== cameraGeneration) {
+            cameraStream.getTracks().forEach(function (track) { track.stop(); });
+            return;
+          }
+          stream = cameraStream;
+          var track = cameraStream.getVideoTracks ? cameraStream.getVideoTracks()[0] : cameraStream.getTracks()[0];
+          activeDeviceId = track && track.getSettings ? track.getSettings().deviceId || deviceId : deviceId;
+          if (cameraSelect && track && track.addEventListener) track.addEventListener('ended', function () {
+            if (stream === cameraStream && !settled) { markDisconnected(); updateCameraList(); }
+          });
+          video.srcObject = cameraStream;
+          await video.play();
+          await waitForVideoFrame(generation);
+          if (settled || generation !== cameraGeneration) return;
         var sourceWidth = video.videoWidth;
         var sourceHeight = video.videoHeight;
         var scale = ANALYSIS_LONG_SIDE / Math.max(sourceWidth, sourceHeight);
@@ -678,34 +886,76 @@
         analysisHeight = Math.max(80, Math.round(sourceHeight * scale));
         analysis.width = analysisWidth;
         analysis.height = analysisHeight;
-        overlay.width = analysisWidth;
-        overlay.height = analysisHeight;
+        overlay.width = desktopFrame ? sourceWidth : analysisWidth;
+        overlay.height = desktopFrame ? sourceHeight : analysisHeight;
         stage.style.aspectRatio = sourceWidth + ' / ' + sourceHeight;
-        if (sourceWidth >= sourceHeight) {
-          stage.style.width = '100%';
-          stage.style.height = 'auto';
-        } else {
-          stage.style.height = '100%';
-          stage.style.width = 'auto';
+        fitStage();
+        scannerGlobal.addEventListener('resize', fitStage);
+        if (!stageResizeObserver && typeof ResizeObserver !== 'undefined') {
+          stageResizeObserver = new ResizeObserver(fitStage);
+          stageResizeObserver.observe(viewport);
         }
-        animationFrame = requestAnimationFrame(analyze);
-      }).catch(function (error) {
-        var denied = error && (
-          error.name === 'NotAllowedError' || error.name === 'SecurityError'
-        );
-        finishError(
-          denied ? 'permission_denied' : 'unsupported',
-          denied
-            ? labels.permission
-            : labels.openFailed
-        );
-      });
+        shutter.disabled = false;
+        if (desktopFrame) {
+          var frame = cameraFrameRect(sourceWidth, sourceHeight, frameAspectRatio, frameScale);
+          // Рамка — отдельный слой DOM над видео, а не рисунок в canvas.
+          frameGuide.style.left = frame.x / sourceWidth * 100 + '%';
+          frameGuide.style.top = frame.y / sourceHeight * 100 + '%';
+          frameGuide.style.width = frame.width / sourceWidth * 100 + '%';
+          frameGuide.style.height = frame.height / sourceHeight * 100 + '%';
+          frameGuide.style.display = 'block';
+        }
+        if (!manualCapture) animationFrame = requestAnimationFrame(analyze);
+
+          if (desktopFrame) {
+            message.textContent = languageCode === 'ky' ? 'Карточканы алкакка жайгаштырып, тартыңыз' : 'Поместите карточку внутрь рамки и нажмите «Снять»';
+            if (compactUi) message.style.display = 'none';
+            if (!initial) {
+              rememberedDeviceId = deviceId;
+              try { scannerGlobal.localStorage.setItem(selectionKey, deviceId); } catch (_) {}
+            }
+            await updateCameraList();
+          }
+        } catch (error) {
+          if (settled || generation !== cameraGeneration) return;
+          stopCurrentStream();
+          if (initial && deviceId && error && (error.name === 'NotFoundError' || error.name === 'OverconstrainedError')) {
+            rememberedDeviceId = '';
+            try { scannerGlobal.localStorage.removeItem(selectionKey); } catch (_) {}
+            var fallback = openCamera('', true);
+            var fallbackGeneration = cameraGeneration;
+            await fallback;
+            if (!settled && stream && fallbackGeneration === cameraGeneration) {
+              message.textContent = labels.savedMissing;
+              if (compactUi) message.style.display = 'block';
+            }
+            return;
+          }
+          var denied = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+          if (!desktopFrame || denied || !cameraSelect) {
+            finishError(denied ? 'permission_denied' : 'scan_failed', denied ? labels.permission : labels.openFailed);
+          } else {
+            message.textContent = labels.openFailed;
+            if (compactUi) message.style.display = 'block';
+            await updateCameraList();
+          }
+        } finally {
+          if (!settled && generation === cameraGeneration) {
+            if (cameraSelect) cameraSelect.disabled = false;
+            if (refreshCameras) refreshCameras.disabled = false;
+          }
+        }
+      }
+
+      openCamera(rememberedDeviceId, true);
     });
   };
 
   // Kept public for deterministic browser tests with synthetic frames.
   scannerGlobal.appWebDocumentScanner.detectDocumentQuad = detectDocumentQuad;
+  scannerGlobal.appWebDocumentScanner.revision = 'desktop-frame-4';
+  scannerGlobal.appWebDocumentScanner.assetRevision = 'desktop-camera-5';
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { detectDocumentQuad: detectDocumentQuad };
+    module.exports = { detectDocumentQuad: detectDocumentQuad, cameraFrameRect: cameraFrameRect };
   }
 })();
