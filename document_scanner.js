@@ -379,10 +379,41 @@
     return !mobile && !iPadDesktopAgent;
   }
 
-  scannerGlobal.appWebDocumentScanner = function (languageCode, compactUi, manualCapture, imageQuality, desktopFrame, frameAspectRatio, frameScale) {
+  var parkedMobileCamera = null;
+  var closeActiveScanner = null;
+
+  function releaseParkedMobileCamera() {
+    var parked = parkedMobileCamera;
+    parkedMobileCamera = null;
+    scannerGlobal.removeEventListener('pagehide', releaseParkedMobileCamera);
+    document.removeEventListener('visibilitychange', releaseParkedOnHidden);
+    if (!parked) return;
+    parked.stream.getTracks().forEach(function (track) { track.stop(); });
+    if (parked.video.pause) parked.video.pause();
+    parked.video.srcObject = null;
+    parked.host.remove();
+  }
+  function releaseParkedOnHidden() {
+    if (document.visibilityState === 'hidden') releaseParkedMobileCamera();
+  }
+  function takeParkedMobileCamera() {
+    var parked = parkedMobileCamera;
+    if (!parked) return null;
+    if (!parked.stream.getTracks().some(function (track) { return track.readyState !== 'ended'; })) {
+      releaseParkedMobileCamera();
+      return null;
+    }
+    parkedMobileCamera = null;
+    scannerGlobal.removeEventListener('pagehide', releaseParkedMobileCamera);
+    document.removeEventListener('visibilitychange', releaseParkedOnHidden);
+    return parked;
+  }
+
+  scannerGlobal.appWebDocumentScanner = function (languageCode, compactUi, manualCapture, imageQuality, desktopFrame, frameAspectRatio, frameScale, keepMobileSession) {
     compactUi = compactUi === true;
     // Старый Dart-клиент может ещё передавать только первые четыре аргумента.
-    desktopFrame = desktopFrame === true || isDesktopBrowser();
+    desktopFrame = typeof desktopFrame === 'boolean' ? desktopFrame : isDesktopBrowser();
+    keepMobileSession = keepMobileSession === true && !desktopFrame;
     if (desktopFrame) manualCapture = true;
     manualCapture = manualCapture === true;
     imageQuality = typeof imageQuality === 'number' ? Math.max(1, Math.min(100, imageQuality)) / 100 : 0.96;
@@ -434,6 +465,8 @@
     active = true;
 
     return new Promise(function (resolve) {
+      var reusedMobileCamera = keepMobileSession ? takeParkedMobileCamera() : null;
+      if (!keepMobileSession) releaseParkedMobileCamera();
       var stream = null;
       var animationFrame = 0;
       var settled = false;
@@ -470,6 +503,7 @@
       ].join(';');
       var cancel = document.createElement('button');
       cancel.type = 'button';
+      cancel.id = 'app-web-scanner-cancel';
       cancel.textContent = labels.cancel;
       cancel.setAttribute('aria-label', labels.close);
       cancel.style.cssText = buttonStyle('');
@@ -487,7 +521,7 @@
       var stage = document.createElement('div');
       // Safari не должен запускать поток в видеоблоке нулевого размера.
       stage.style.cssText = 'position:relative;width:100%;height:100%;max-width:100%;max-height:100%;overflow:hidden';
-      var video = document.createElement('video');
+      var video = reusedMobileCamera ? reusedMobileCamera.video : document.createElement('video');
       video.autoplay = true;
       video.muted = true;
       video.defaultMuted = true;
@@ -505,6 +539,7 @@
       var overlay = document.createElement('canvas');
       overlay.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1';
       stage.append(video, overlay);
+      if (reusedMobileCamera) reusedMobileCamera.host.remove();
       var frameGuide = null;
       if (desktopFrame) {
         frameGuide = document.createElement('div');
@@ -538,6 +573,7 @@
       messageWrap.append(message, progressTrack);
       var shutter = document.createElement('button');
       shutter.type = 'button';
+      shutter.id = 'app-web-scanner-shutter';
       shutter.disabled = true;
       shutter.textContent = labels.shutter;
       shutter.style.cssText = buttonStyle('white-space:nowrap');
@@ -606,16 +642,34 @@
       var analysisContext = analysis.getContext('2d', { willReadFrequently: true });
       var overlayContext = overlay.getContext('2d');
 
-      function cleanup() {
+      function cleanup(preserveMobileCamera) {
         if (cancelVideoWait) cancelVideoWait();
         cameraGeneration += 1;
         deviceListGeneration += 1;
         if (mediaDevices && mediaDevices.removeEventListener) mediaDevices.removeEventListener('devicechange', onDeviceChange);
         if (animationFrame) cancelAnimationFrame(animationFrame);
-        stopCurrentStream();
+        if (preserveMobileCamera && keepMobileSession && stream && document.visibilityState !== 'hidden') {
+          // В серии снимков сохраняем один разрешённый поток и тот же video.
+          // WebKit не приходится повторно запускать камеру на каждую сторону.
+          var host = document.createElement('div');
+          host.setAttribute('aria-hidden', 'true');
+          host.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;overflow:hidden;opacity:0.01;pointer-events:none';
+          host.append(video);
+          document.body.append(host);
+          parkedMobileCamera = {stream:stream,video:video,host:host};
+          stream = null;
+          scannerGlobal.addEventListener('pagehide', releaseParkedMobileCamera);
+          document.addEventListener('visibilitychange', releaseParkedOnHidden);
+        } else {
+          stopCurrentStream();
+        }
         root.remove();
         document.removeEventListener('keydown', onKeyDown);
         scannerGlobal.removeEventListener('pagehide', onPageHide);
+        document.removeEventListener('visibilitychange', onVisibilityChanged);
+        scannerGlobal.removeEventListener('resize', layoutMobilePreview);
+        if (scannerGlobal.visualViewport) scannerGlobal.visualViewport.removeEventListener('resize', layoutMobilePreview);
+        if (closeActiveScanner === onPageHide) closeActiveScanner = null;
         scannerGlobal.removeEventListener('resize', fitStage);
         if (stageResizeObserver) stageResizeObserver.disconnect();
         active = false;
@@ -737,7 +791,7 @@
         });
         // Let the green frame remain visible for one brief confirmation frame.
         scannerGlobal.setTimeout(function () {
-          cleanup();
+          cleanup(true);
           resolve(payload);
         }, 120);
       }
@@ -796,7 +850,16 @@
         }
       }
 
-      function onPageHide() { finish(null); }
+      function onPageHide() {
+        keepMobileSession = false;
+        if (settled) stopCurrentStream();
+        else finish(null);
+      }
+      function onVisibilityChanged() {
+        if (document.visibilityState === 'hidden') onPageHide();
+      }
+      closeActiveScanner = onPageHide;
+      document.addEventListener('visibilitychange', onVisibilityChanged);
       document.addEventListener('keydown', onKeyDown);
       scannerGlobal.addEventListener('pagehide', onPageHide);
       if (manualCapture) {
@@ -976,24 +1039,35 @@
         }
       }
 
+      function layoutMobilePreview() {
+        if (desktopFrame || !video.videoWidth || !video.videoHeight) return;
+        var availableWidth = viewport.clientWidth || scannerGlobal.innerWidth || video.videoWidth;
+        var availableHeight = viewport.clientHeight || scannerGlobal.innerHeight || video.videoHeight;
+        var ratio = video.videoWidth / video.videoHeight;
+        var width = Math.max(1, Math.min(availableWidth, availableHeight * ratio));
+        stage.style.width = width + 'px';
+        stage.style.height = width / ratio + 'px';
+      }
+
       function startMobileCamera() {
         // Мобильный запуск до добавления desktop/USB: один запрос задней камеры,
         // прямое подключение потока, без выбора устройства и desktop resize.
         var generation = cameraGeneration;
-        mediaDevices.getUserMedia({
+        var acquisition = reusedMobileCamera ? Promise.resolve(reusedMobileCamera.stream) : mediaDevices.getUserMedia({
           audio: false,
           video: {
             facingMode: { ideal: 'environment' },
             width: { ideal: 1920 },
             height: { ideal: 1080 },
           },
-        }).then(function (cameraStream) {
+        });
+        acquisition.then(function (cameraStream) {
           if (settled || generation !== cameraGeneration) {
             cameraStream.getTracks().forEach(function (track) { track.stop(); });
             return;
           }
           stream = cameraStream;
-          video.srcObject = cameraStream;
+          if (video.srcObject !== cameraStream) video.srcObject = cameraStream;
           var playback = Promise.resolve(video.play()).then(function () {
             return new Promise(function () {});
           });
@@ -1010,17 +1084,10 @@
           overlay.width = analysisWidth;
           overlay.height = analysisHeight;
           stage.style.aspectRatio = sourceWidth + ' / ' + sourceHeight;
-          // Прежняя мобильная компоновка, до fitStage/ResizeObserver для desktop.
-          var widthLimited = viewport.clientWidth && viewport.clientHeight
-            ? sourceWidth / sourceHeight >= viewport.clientWidth / viewport.clientHeight
-            : sourceWidth >= sourceHeight;
-          if (widthLimited) {
-            stage.style.width = '100%';
-            stage.style.height = 'auto';
-          } else {
-            stage.style.height = '100%';
-            stage.style.width = 'auto';
-          }
+          // Явный размер исключает схлопывание auto/aspect-ratio во flex у WebKit.
+          layoutMobilePreview();
+          scannerGlobal.addEventListener('resize', layoutMobilePreview);
+          if (scannerGlobal.visualViewport) scannerGlobal.visualViewport.addEventListener('resize', layoutMobilePreview);
           shutter.disabled = false;
           if (!manualCapture) animationFrame = requestAnimationFrame(analyze);
         }).catch(function (error) {
@@ -1038,7 +1105,11 @@
   // Kept public for deterministic browser tests with synthetic frames.
   scannerGlobal.appWebDocumentScanner.detectDocumentQuad = detectDocumentQuad;
   scannerGlobal.appWebDocumentScanner.revision = 'desktop-frame-4';
-  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-auto-8';
+  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-session-9';
+  scannerGlobal.appWebDocumentScanner.releaseCamera = function () {
+    if (closeActiveScanner) closeActiveScanner();
+    releaseParkedMobileCamera();
+  };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { detectDocumentQuad: detectDocumentQuad, cameraFrameRect: cameraFrameRect };
   }
