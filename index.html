@@ -28,6 +28,17 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="description" content="A new Flutter project.">
 
+  <style>
+    /* До получения стиля от Flutter скрытое поле доступности наследует
+       мелкий браузерный шрифт, вызывающий auto-zoom при фокусе на iPhone. */
+    @supports (-webkit-touch-callout: none) {
+      input[data-semantics-role="text-field"],
+      textarea[data-semantics-role="text-field"] {
+        font-size: 16px;
+      }
+    }
+  </style>
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
