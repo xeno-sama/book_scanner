@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "title": "Curated pilot crosswalk UDC to numeric BBK",
+    "version": "2026.07-pilot.1",
+    "bbk_source": "https://www.rsl.ru/nauka/bibliotechno-bibliograficheskaya-klassifikatsiya-bbk/elektronnyy-etalon-bbk",
+    "source_status": "curated from the local BBK authority; exact official export is not bundled",
+    "policy": "Exact match, then longest verified prefix, then verified parent. Never synthesize BBK notation."
+  },
+  "items": [
+    {"udc_pattern":"82.0","bbk_code":"83","title":"Литературоведение","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"821.161.1","bbk_code":"84(2Рос=Рус)","title":"Русская художественная литература","facets":["language"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"821.512.154","bbk_code":"84(5Кир)","title":"Художественная литература Кыргызстана","facets":["language"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"821.111","bbk_code":"84(4)","title":"Художественная литература Европы","facets":["language"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"821","bbk_code":"84","title":"Художественная литература","facets":["form"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"82","bbk_code":"83","title":"Литературоведение","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+
+    {"udc_pattern":"342.9","bbk_code":"67.412","title":"Административное право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"342","bbk_code":"67.400","title":"Конституционное право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"343.98","bbk_code":"67.408","title":"Криминалистика и уголовное право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"343.1","bbk_code":"67.410","title":"Уголовный процесс","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"343","bbk_code":"67.408","title":"Уголовное право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"347","bbk_code":"67.404","title":"Гражданское право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"349.2","bbk_code":"67.4","title":"Трудовое право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"341","bbk_code":"67.9","title":"Международное право","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"34","bbk_code":"67","title":"Право. Юридические науки","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+
+    {"udc_pattern":"94(575.2)","bbk_code":"63.3(5Кир)","title":"История Кыргызстана","facets":["geography"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"94(47)","bbk_code":"63.3(2)","title":"История России","facets":["geography"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"94(100)","bbk_code":"63.3(0)","title":"Всемирная история","facets":["geography"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"94","bbk_code":"63.3","title":"История","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+
+    {"udc_pattern":"336","bbk_code":"65.26","title":"Финансы. Денежное обращение. Кредит","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"339","bbk_code":"65.29","title":"Мировая экономика и международные отношения","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"005","bbk_code":"65.2","title":"Управление организациями","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"33","bbk_code":"65","title":"Экономика. Экономические науки","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+
+    {"udc_pattern":"72","bbk_code":"85.11","title":"Архитектура","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"73","bbk_code":"85.12","title":"Скульптура","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"75","bbk_code":"85.14","title":"Живопись","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"76","bbk_code":"85.15","title":"Графика","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"78","bbk_code":"85.31","title":"Музыка","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"792","bbk_code":"85.33","title":"Театр","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+    {"udc_pattern":"7","bbk_code":"85","title":"Искусство. Искусствознание","facets":["topic"],"source_edition":"Средние таблицы ББК"},
+
+    {"udc_pattern":"655","bbk_code":"76.1","title":"Книговедение. Издательское дело","facets":["topic"],"source_edition":"Средние таблицы ББК"}
+  ]
+}
