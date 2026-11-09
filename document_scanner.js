@@ -7,6 +7,7 @@
   var ANALYSIS_LONG_SIDE = 360;
   var STABLE_FRAMES_REQUIRED = 8;
   var ANALYSIS_INTERVAL_MS = 140;
+  var MOBILE_CAMERA_IDLE_MS = 10000;
 
   function polygonArea(points) {
     var sum = 0;
@@ -388,6 +389,7 @@
     scannerGlobal.removeEventListener('pagehide', releaseParkedMobileCamera);
     document.removeEventListener('visibilitychange', releaseParkedOnHidden);
     if (!parked) return;
+    scannerGlobal.clearTimeout(parked.idleTimer);
     parked.stream.getTracks().forEach(function (track) { track.stop(); });
     if (parked.video.pause) parked.video.pause();
     parked.video.srcObject = null;
@@ -404,6 +406,7 @@
       return null;
     }
     parkedMobileCamera = null;
+    scannerGlobal.clearTimeout(parked.idleTimer);
     scannerGlobal.removeEventListener('pagehide', releaseParkedMobileCamera);
     document.removeEventListener('visibilitychange', releaseParkedOnHidden);
     return parked;
@@ -656,7 +659,13 @@
           host.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;overflow:hidden;opacity:0.01;pointer-events:none';
           host.append(video);
           document.body.append(host);
-          parkedMobileCamera = {stream:stream,video:video,host:host};
+          var parked = {stream:stream,video:video,host:host,idleTimer:null};
+          parkedMobileCamera = parked;
+          // Короткая пауза сохраняет быстрый следующий снимок, но камера
+          // не должна греть телефон всё время заполнения номеров/ожидания.
+          parked.idleTimer = scannerGlobal.setTimeout(function () {
+            if (parkedMobileCamera === parked) releaseParkedMobileCamera();
+          }, MOBILE_CAMERA_IDLE_MS);
           stream = null;
           scannerGlobal.addEventListener('pagehide', releaseParkedMobileCamera);
           document.addEventListener('visibilitychange', releaseParkedOnHidden);
@@ -1105,7 +1114,7 @@
   // Kept public for deterministic browser tests with synthetic frames.
   scannerGlobal.appWebDocumentScanner.detectDocumentQuad = detectDocumentQuad;
   scannerGlobal.appWebDocumentScanner.revision = 'desktop-frame-4';
-  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-session-9';
+  scannerGlobal.appWebDocumentScanner.assetRevision = 'mobile-session-10';
   scannerGlobal.appWebDocumentScanner.releaseCamera = function () {
     if (closeActiveScanner) closeActiveScanner();
     releaseParkedMobileCamera();
